@@ -1,0 +1,38 @@
+# Builds AfterhoursNex for Mac on every push, and publishes a release with the disk image for tags such as v1.2.S.
+name: AfterhoursNex for Mac
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use the newest Xcode
+        run: |
+          XCODE="$(ls -d /Applications/Xcode_2*.app | sort -V | tail -1)"
+          echo "Using $XCODE"
+          sudo xcode-select -s "$XCODE"
+          swift --version
+      - name: Note the repository, for the update checker
+        run: perl -pi -e 's|static let repo = ""|static let repo = "$ENV{GITHUB_REPOSITORY}"|' Sources/AfterhoursNex/Updates.swift
+      - name: Version from the tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+      - name: Build
+        run: ./Scripts/build-app.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AfterhoursNex-Mac
+          path: build/*.dmg
+      - name: Publish the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: AfterhoursNex for Mac ${{ github.ref_name }}
+          body_path: RELEASE_NOTES.md
+          files: build/*.dmg
